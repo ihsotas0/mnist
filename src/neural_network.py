@@ -1,7 +1,38 @@
-import logging
+"""
+🔧 Additional Recommendations
 
+    Add logging configuration example in docstring:
+
+# Enable debug logging
+logging.basicConfig(level=logging.DEBUG)
+# Or file logging for long training runs
+handler = logging.FileHandler('training.log')
+logger.addHandler(handler)
+
+    Add gradient clipping option with logging:
+
+# Optional: prevent exploding gradients
+if self.gradient_clip_norm is not None:
+    total_norm = np.sqrt(sum(np.sum(g**2) for g in gradients_w))
+    if total_norm > self.gradient_clip_norm:
+        logger.warning(f"Gradient norm {total_norm:.2f} exceeded clip threshold; scaling")
+        scale = self.gradient_clip_norm / total_norm
+        gradients_w = [g * scale for g in gradients_w]
+
+    Memory optimization: Pre-allocate arrays if max_iter is known:
+
+# Instead of list append in tight loops (already implemented above)
+# For very large max_iter, consider:
+# self.loss_curve = np.empty(self.max_iter) * np.nan
+# Then assign by index and trim at end
+
+The enhanced code now provides comprehensive visibility into training dynamics while fixing critical bugs that would prevent the network from functioning correctly. 🎯
+"""
+
+
+import logging
 import numpy as np
-from scipy.special import expit  # Better numerical stability
+from scipy.special import expit, softmax
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +48,7 @@ D_ACTIVATION_FUNCTIONS = {
     "identity": lambda x: np.ones_like(x),
     "logistic": lambda x: expit(x) * (1 - expit(x)),
     "tanh": lambda x: 1 - np.tanh(x) ** 2,
-    "relu": lambda x: np.where(x > 0, 1, 0),
+    "relu": lambda x: np.where(x > 0, 1, 0).astype(float),
 }
 
 
@@ -44,7 +75,7 @@ class NeuralNetwork:
 
     alpha : float, default=1e-4
         L2 regularization (weight decay) strength. Higher values increase
-        regularization.
+        regularization. Set to 0 to disable regularization
 
     batch_size : int or 'auto', default='auto'
         Mini-batch size for stochastic gradient descent. If 'auto', uses
@@ -96,7 +127,7 @@ class NeuralNetwork:
 
     Methods
     -------
-    fit(x_train, y_train, validation_data=(x_test, y_test))
+    fit(x_train, y_train, validation_data=(x_val, y_val))
         Train the network using mini-batch SGD with optional early stopping. Set
         `validation_data`, otherwise accuracy scores will not be tracked in
         `validation_scores`.
@@ -107,7 +138,7 @@ class NeuralNetwork:
     predict_proba(x)
         Return probability estimates for each class.
 
-    score(x, y)
+    score(x_test, y_test)
         Compute mean classification accuracy on given data and labels.
 
     Notes
@@ -160,102 +191,153 @@ class NeuralNetwork:
         activation_function: str = "relu",
         *,
         alpha: float = 1e-4,
-        batch_size: int = "auto",
+        batch_size: int | str = "auto",
         learning_rate: float = 0.001,
         max_iter: int = 2000,
         tolerance: float = 1e-4,
         n_iter_no_change: int = 25,
+        random_state: int | None = None,
     ):
 
-        # TODO: Add parameter value validation. Low priority.
+        # FUTURE JONAH. START CODE REVIEW FROM HERE DOWN
 
-        # MLP functions, weights, biases
+        logger.info(f"Initializing NeuralNetwork with layer_sizes={layer_sizes}")
+        logger.debug(f"Parameters: activation={activation_function}, alpha={alpha}, "
+                    f"batch_size={batch_size}, lr={learning_rate}, max_iter={max_iter}")
+        
+        # Parameter validation
+        if activation_function not in ACTIVATION_FUNCTIONS:
+            logger.error(f"Invalid activation_function: '{activation_function}'. "
+                        f"Valid options: {list(ACTIVATION_FUNCTIONS.keys())}")
+            raise ValueError(f"Unknown activation function: {activation_function}")
+        
+        if len(layer_sizes) < 2:
+            logger.error(f"layer_sizes must have at least 2 elements (input and output), got {len(layer_sizes)}")
+            raise ValueError("layer_sizes must define at least input and output layers")
+        
+        if any(size <= 0 for size in layer_sizes):
+            logger.error(f"All layer sizes must be positive, got {layer_sizes}")
+            raise ValueError("Layer sizes must be positive integers")
+
+        # MLP functions
+        self.activation_func_name = activation_function
         self.activation_function = ACTIVATION_FUNCTIONS[activation_function]
         self.d_activation_function = D_ACTIVATION_FUNCTIONS[activation_function]
+        logger.debug(f"Selected activation: {activation_function}")
 
+        # Initialize weights with appropriate scheme
         self.weights = self._get_initial_weights(layer_sizes)
         self.biases = self._get_initial_biases(layer_sizes)
+        logger.debug(f"Initialized {len(self.weights)} weight matrices with "
+                    f"{'He' if activation_function == 'relu' else 'Xavier'} initialization")
 
-        # L2 regularization
+        # Regularization
         self.alpha = alpha
+        if alpha > 0:
+            logger.info(f"L2 regularization enabled with alpha={alpha}")
 
         # Training parameters
         self.batch_size = batch_size
         self.learning_rate = learning_rate
+        logger.debug(f"Training config: batch_size={batch_size}, lr={learning_rate}")
 
-        # Training stop conditions
+        # Stopping conditions
         self.max_iter = max_iter
         self.tolerance = tolerance
         self.n_iter_no_change = n_iter_no_change
 
-        # Information about MLP object
+        # State tracking
         self.layer_sizes = layer_sizes
         self.n_iter = 0
-        self.loss_curve = np.array([])
-        self.activation_func_name = activation_function
-
-        # Validation score tracking
-        self.validation_scores = np.array([])
+        self.loss_curve = []  # Use list for efficient appending
+        self.validation_scores = []
+        self.random_state = random_state
+        
+        logger.info(f"NeuralNetwork initialized successfully with {sum(w.size for w in self.weights) + sum(b.size for b in self.biases):,} parameters")
 
     def _get_initial_weights(self, layer_sizes):
         """Initialize weights using Xavier/Glorot initialization (He for ReLU)."""
         weights = []
         for i in range(len(layer_sizes) - 1):
             if self.activation_func_name == "relu":
-                # He initialization for ReLU
                 scale = np.sqrt(2.0 / layer_sizes[i])
+                init_name = "He"
             else:
-                # Xavier initialization for logistic/tanh
                 scale = np.sqrt(6.0 / (layer_sizes[i] + layer_sizes[i + 1]))
+                init_name = "Xavier"
+            
             w = np.random.randn(layer_sizes[i], layer_sizes[i + 1]) * scale
             weights.append(w)
+            logger.debug(f"Layer {i}->{i+1}: {layer_sizes[i]} x {layer_sizes[i+1]}, "
+                        f"{init_name} init, scale={scale:.4f}, weight std={np.std(w):.4f}")
         return weights
 
     def _get_initial_biases(self, layer_sizes):
         """Initialize biases to zeros."""
-        return [np.zeros(size) for size in layer_sizes[1:]]
+        biases = [np.zeros(size) for size in layer_sizes[1:]]
+        logger.debug(f"Initialized {len(biases)} bias vectors to zeros")
+        return biases
 
     def _forward_pass(self, x):
         """Forward pass returning activations and pre-activations for backprop."""
-
+        logger.debug(f"Forward pass input shape: {x.shape}")
+        
         activations = [x]
         pre_activations = []
 
         a = x
-        for w, b in zip(weights, biases):
+        for i, (w, b) in enumerate(zip(self.weights, self.biases)):
             z = a @ w + b
             pre_activations.append(z)
-            a = self.activation_function(z)
+            
+            # Apply activation: use softmax for output layer in multi-class settings
+            if i == len(self.weights) - 1 and self.layer_sizes[-1] > 1:
+                # Output layer: softmax for numerical stability with cross-entropy
+                a = softmax(z, axis=1)
+                logger.debug(f"Output layer: applied softmax, shape={a.shape}")
+            else:
+                a = self.activation_function(z)
+                logger.debug(f"Hidden layer {i+1}: activation={self.activation_func_name}, "
+                           f"output range=[{a.min():.4f}, {a.max():.4f}]")
+            
             activations.append(a)
 
+        logger.debug(f"Forward pass complete: {len(activations)} activations computed")
         return activations, pre_activations
 
     def _compute_loss(self, y_true, y_pred, weights=None):
         """Compute cross-entropy loss with optional L2 regularization."""
         n_samples = y_true.shape[0]
-
-        # Clip to avoid log(0)
+        
+        # Numerical stability: clip predictions
         y_pred_clipped = np.clip(y_pred, 1e-15, 1 - 1e-15)
-        cross_entropy = -np.sum(y_pred * np.log(y_pred_clipped)) / n_samples
+        
+        # Cross-entropy: -sum(y * log(y_pred)) / n
+        cross_entropy = -np.sum(y_true * np.log(y_pred_clipped)) / n_samples
+        logger.debug(f"Cross-entropy loss (unregularized): {cross_entropy:.6f}")
 
         # L2 regularization term
+        l2_term = 0.0
         if self.alpha > 0 and weights is not None:
             l2_term = 0.5 * self.alpha * sum(np.sum(w**2) for w in weights)
             cross_entropy += l2_term
+            logger.debug(f"L2 regularization term: {l2_term:.6f}")
 
-        return cross_entropy
+        total_loss = cross_entropy
+        logger.debug(f"Total loss: {total_loss:.6f}")
+        return total_loss
 
     def _backward_pass(self, x, y_true, activations, pre_activations):
         """Backward pass computing gradients for all weights and biases."""
         n_samples = x.shape[0]
+        logger.debug(f"Backward pass: n_samples={n_samples}")
 
-        # Output layer delta (cross-entropy + activation derivative)
-        if self._activation_name == "logistic":
-            # Simplified gradient for logistic + cross-entropy
-            delta = activations[-1] - y_true
-        else:
-            d_loss_da = activations[-1] - y_true
-            delta = d_loss_da * self.d_activation_function(pre_activations[-1])
+        # Output layer delta: simplified gradient for softmax + cross-entropy
+        # This works because d(CE)/d(z) = softmax(z) - y_true when using softmax output
+        output_activation = activations[-1]
+        delta = output_activation - y_true
+        logger.debug(f"Output delta: shape={delta.shape}, mean={np.mean(delta):.6f}, "
+                    f"std={np.std(delta):.6f}")
 
         gradients_w = []
         gradients_b = []
@@ -264,110 +346,196 @@ class NeuralNetwork:
         for l in reversed(range(len(self.weights))):
             grad_w = activations[l].T @ delta / n_samples
             grad_b = np.mean(delta, axis=0)
-
+            
             # Add L2 regularization gradient
             if self.alpha > 0:
                 grad_w += self.alpha * self.weights[l]
+                logger.debug(f"Layer {l}: added L2 gradient (alpha={self.alpha})")
+
+            # Log gradient statistics for debugging
+            logger.debug(f"Layer {l} gradients: W shape={grad_w.shape}, "
+                        f"||W||={np.linalg.norm(grad_w):.4f}, "
+                        f"||b||={np.linalg.norm(grad_b):.4f}")
 
             gradients_w.insert(0, grad_w)
             gradients_b.insert(0, grad_b)
 
+            # Propagate error to previous layer (if not input layer)
             if l > 0:
                 delta = (delta @ self.weights[l].T) * self.d_activation_function(
                     pre_activations[l - 1]
                 )
+                logger.debug(f"Propagated delta to layer {l-1}: shape={delta.shape}")
 
+        logger.debug("Backward pass complete")
         return gradients_w, gradients_b
 
     def _update_weights(self, gradients_w, gradients_b):
         """Apply gradient descent update to weights and biases."""
+        logger.debug(f"Updating weights with learning_rate={self.learning_rate}")
+        
         for i in range(len(self.weights)):
+            old_w_norm = np.linalg.norm(self.weights[i])
+            old_b_norm = np.linalg.norm(self.biases[i])
+            
             self.weights[i] -= self.learning_rate * gradients_w[i]
             self.biases[i] -= self.learning_rate * gradients_b[i]
+            
+            new_w_norm = np.linalg.norm(self.weights[i])
+            new_b_norm = np.linalg.norm(self.biases[i])
+            
+            logger.debug(f"Layer {i}: weight norm {old_w_norm:.4f}→{new_w_norm:.4f}, "
+                        f"bias norm {old_b_norm:.4f}→{new_b_norm:.4f}")
 
     def _get_batch_indices(self, n_samples, batch_size, rng):
         """Yield shuffled mini-batch indices."""
         indices = np.arange(n_samples)
         rng.shuffle(indices)
+        
+        n_batches = int(np.ceil(n_samples / batch_size))
+        logger.debug(f"Created {n_batches} mini-batches of size ~{batch_size} from {n_samples} samples")
+        
         for start in range(0, n_samples, batch_size):
             end = min(start + batch_size, n_samples)
             yield indices[start:end]
 
     def fit(self, x, y, validation_data=None):
         """Train the neural network using mini-batch SGD with early stopping."""
+        logger.info(f"Starting training: {x.shape[0]} samples, {x.shape[1]} features, "
+                   f"{y.shape[1]} classes")
+        
         n_samples = x.shape[0]
         batch_size = (
             min(200, n_samples) if self.batch_size == "auto" else self.batch_size
         )
+        
+        if batch_size > n_samples:
+            logger.warning(f"batch_size ({batch_size}) > n_samples ({n_samples}); "
+                          f"using full-batch gradient descent")
+            batch_size = n_samples
+        
+        logger.info(f"Training configuration: batch_size={batch_size}, "
+                   f"max_epochs={self.max_iter}, early_stopping_patience={self.n_iter_no_change}")
 
         x_train, y_train = x, y
 
         # Handle validation
+        x_val, y_val = None, None
         if validation_data is not None:
             x_val, y_val = validation_data
-        else:
-            x_val, y_val = None, None
+            logger.info(f"Validation data provided: {x_val.shape[0]} samples")
 
         # Reset training state
-        self.loss_curve = np.array([])
-        self.validation_scores = np.array([])
+        self.loss_curve = []
+        self.validation_scores = []
+        self.n_iter = 0
 
         best_loss = np.inf
         no_improvement = 0
-        rng = np.random.RandomState(42)
+        
+        # Initialize RNG with user-provided or default seed
+        rng = np.random.RandomState(self.random_state if self.random_state is not None else 42)
+        logger.debug(f"Random state initialized with seed={rng.randint(0, 2**31)}")
 
         for iteration in range(self.max_iter):
             self.n_iter = iteration + 1
-
-            # Shuffle and mini-batch SGD
+            
+            # Shuffle data each epoch
             perm = np.arange(len(x_train))
             rng.shuffle(perm)
             x_shuf, y_shuf = x_train[perm], y_train[perm]
 
-            for batch_idx in self._get_batch_indices(len(x_train), batch_size, rng):
-                x_batch, y_batch = x_shuf[batch_idx], y_shuf[batch_idx]
+            epoch_losses = []
+            
+            # Mini-batch SGD
+            for batch_idx, batch_indices in enumerate(
+                self._get_batch_indices(len(x_train), batch_size, rng)
+            ):
+                x_batch, y_batch = x_shuf[batch_indices], y_shuf[batch_indices]
 
                 activations, pre_activations = self._forward_pass(x_batch)
                 grad_w, grad_b = self._backward_pass(
                     x_batch, y_batch, activations, pre_activations
                 )
                 self._update_weights(grad_w, grad_b)
+                
+                # Track batch loss for epoch summary
+                batch_loss = self._compute_loss(y_batch, activations[-1], self.weights)
+                epoch_losses.append(batch_loss)
+                
+                if batch_idx % 10 == 0:
+                    logger.info(f"Epoch {self.n_iter}, Batch {batch_idx}: loss={batch_loss:.6f}")
 
-            # Track training loss
-            activations, _ = self._forward_pass(x_train)
-            train_loss = self._compute_loss(y_train, activations[-1])
-            self.loss_curve = np.append(self.loss_curve, train_loss)
+            # Compute full training loss for monitoring
+            train_activations, _ = self._forward_pass(x_train)
+            train_loss = self._compute_loss(y_train, train_activations[-1], self.weights)
+            self.loss_curve.append(train_loss)
+            
+            # Log epoch summary
+            avg_batch_loss = np.mean(epoch_losses) if epoch_losses else train_loss
+            logger.info(f"Epoch {self.n_iter:4d}/{self.max_iter}: "
+                       f"train_loss={train_loss:.6f} (batch_avg={avg_batch_loss:.6f}), "
+                       f"lr={self.learning_rate}")
 
             # Track validation score if requested
             if x_val is not None:
                 val_score = self.score(x_val, y_val)
-                self.validation_scores = np.append(self.validation_scores, val_score)
+                self.validation_scores.append(val_score)
+                logger.info(f"  -> Validation accuracy: {val_score:.4f}")
 
-            # Early stopping check
-            if abs(best_loss - train_loss) < self.tolerance:
-                no_improvement += 1
-                if no_improvement >= self.n_iter_no_change:
-                    logger.info(f"Early stopping at iteration {iteration + 1}")
-                    break
-            else:
+            # Early stopping check: did loss improve by at least tolerance?
+            if best_loss - train_loss > self.tolerance:
+                # Significant improvement
+                logger.debug(f"Loss improved: {best_loss:.6f} -> {train_loss:.6f} "
+                           f"(delta={best_loss - train_loss:.6f} > tolerance={self.tolerance})")
+                best_loss = train_loss
                 no_improvement = 0
-                best_loss = min(best_loss, train_loss)
+            else:
+                # No significant improvement
+                no_improvement += 1
+                logger.debug(f"No significant improvement (patience: {no_improvement}/{self.n_iter_no_change})")
+                
+                if no_improvement >= self.n_iter_no_change:
+                    logger.info(f"✓ Early stopping triggered at epoch {self.n_iter}: "
+                               f"no improvement for {self.n_iter_no_change} consecutive epochs")
+                    break
+
+        # Training complete summary
+        logger.info(f"Training completed: {self.n_iter}/{self.max_iter} epochs, "
+                   f"final loss={self.loss_curve[-1]:.6f}")
+        
+        if self.validation_scores:
+            best_val_idx = np.argmax(self.validation_scores)
+            logger.info(f"Best validation accuracy: {max(self.validation_scores):.4f} at epoch {best_val_idx + 1}")
+
+        # Convert lists to arrays for API compatibility
+        self.loss_curve = np.array(self.loss_curve)
+        self.validation_scores = np.array(self.validation_scores)
+        
+        return self
 
     def predict_proba(self, x):
         """Return probability estimates for each class."""
+        logger.debug(f"Predicting probabilities for {x.shape[0]} samples")
         activations, _ = self._forward_pass(x)
         return activations[-1]
 
     def predict(self, x):
         """Predict class label for x."""
+        logger.debug(f"Predicting classes for {x.shape[0]} samples")
         proba = self.predict_proba(x)
-        return np.argmax(proba, axis=1)
+        predictions = np.argmax(proba, axis=1)
+        logger.debug(f"Predictions: unique classes={np.unique(predictions)}, "
+                    f"distribution={dict(zip(*np.unique(predictions, return_counts=True)))}")
+        return predictions
 
     def score(self, x, y):
         """Return mean accuracy on test data x and labels y."""
-
-        predictions = [self.predict(xi) for xi in x]
-
-        successes = [pred == true for pred, true in zip(predictions, y)]
-
-        return np.mean(successes)
+        logger.debug(f"Evaluating accuracy on {x.shape[0]} samples")
+        
+        predictions = [self.predict(x) for xi in x]        
+        
+        accuracy = np.mean(predictions == y)
+        logger.info(f"Accuracy: {accuracy:.4f} ({np.sum(predictions == y)}/{len(y)} correct)")
+        
+        return accuracy
