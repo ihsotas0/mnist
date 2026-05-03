@@ -16,14 +16,14 @@ def main():
     else:
         logging.basicConfig(level=logging.INFO)
 
-    net = NeuralNetwork(track_validation_score=True)
+    net = NeuralNetwork()
 
     # Load datasets
-    train_images = load_mnist_images("dataset/train-images-idx3-ubyte")
-    train_labels = load_mnist_labels("dataset/train-labels-idx1-ubyte")
+    train_images = load_mnist_images("../dataset/train-images-idx3-ubyte")
+    train_labels = load_mnist_labels("../dataset/train-labels-idx1-ubyte")
 
-    test_images = load_mnist_images("dataset/t10k-images-idx3-ubyte")
-    test_labels = load_mnist_labels("dataset/t10k-labels-idx1-ubyte")
+    test_images = load_mnist_images("../dataset/t10k-images-idx3-ubyte")
+    test_labels = load_mnist_labels("../dataset/t10k-labels-idx1-ubyte")
 
     # Format data
     x_train, y_train = format_mnist_data(train_images, train_labels)
