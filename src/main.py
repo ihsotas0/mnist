@@ -21,19 +21,19 @@ def main():
 
     # HACK: Implement better system
     if "-v" in argv:
-        logger.basicConfig(level=logging.DEBUG)
+        logging.basicConfig(filename=log_file, level=logging.DEBUG)
         #logger.setLevel(logging.DEBUG)
         #ch.setLevel(logging.DEBUG)
         #fh.setLevel(logging.DEBUG)
     else:
-        logger.basicConfig(level=logging.INFO)
+        logging.basicConfig(level=logging.INFO)
         #logger.setLevel(logging.INFO)
         #ch.setLevel(logging.INFO)
         #fh.setLevel(logging.INFO)
     if "-l" in argv:
         net = load(input("Network name? "))
     else:
-        net = NeuralNetwork(max_iter=20)
+        net = NeuralNetwork(max_iter=20, layer_sizes=(784,16,10))
 
     #logger.addHandler(ch)
     #logger.addHandler(fh)
@@ -53,6 +53,8 @@ def main():
 
     net.fit(x_train, y_train, validation_data=(x_val, y_val))
 
+    save(net, f"../models/mnist_net_{timestr}.pkl")
+
     plt.plot(net.loss_curve, label="Loss")
     plt.plot(net.validation_scores, label="Validation Accuracy")
     plt.xlabel("Epoch")
@@ -60,9 +62,6 @@ def main():
     plt.title("Training Curve")
     plt.legend()
     plt.show()
-
-    save(net, f"../models/mnist_net_{timestr}.pkl")
-
 
 if __name__ == "__main__":
     main()

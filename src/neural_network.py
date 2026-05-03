@@ -544,20 +544,20 @@ class NeuralNetwork:
         proba = self.predict_proba(x)
         predictions = np.argmax(proba, axis=1)
         logger.debug(
-            f"Predictions: unique classes={np.unique(predictions)}, "
-            f"distribution={dict(zip(*np.unique(predictions, return_counts=True)))}"
+            f"Predictions: {predictions}, "
         )
         return predictions
 
     def score(self, x, y):
         """Return mean accuracy on test data x and labels y."""
         logger.debug(f"Evaluating accuracy on {x.shape[0]} samples")
-
-        predictions = [self.predict(x) for xi in x]
-
-        accuracy = np.mean(predictions == y)
+        
+        y_true = np.argmax(y, axis=1) if y.ndim > 1 else y
+        
+        predictions = self.predict(x)
+        
+        accuracy = np.mean(predictions == y_true)
         logger.info(
-            f"Accuracy: {accuracy:.4f} ({np.sum(predictions == y)}/{len(y)} correct)"
+            f"Accuracy: {accuracy:.4f} ({np.sum(predictions == y_true)}/{len(y_true)} correct)"
         )
-
         return accuracy
