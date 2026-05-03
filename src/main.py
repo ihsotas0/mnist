@@ -26,14 +26,15 @@ def main():
         #ch.setLevel(logging.DEBUG)
         #fh.setLevel(logging.DEBUG)
     else:
-        logging.basicConfig(level=logging.INFO)
+        logging.basicConfig(filename=log_file, level=logging.INFO)
         #logger.setLevel(logging.INFO)
         #ch.setLevel(logging.INFO)
         #fh.setLevel(logging.INFO)
     if "-l" in argv:
+        # TODO: Fix lambda pickle error so models can actually be reloaded
         net = load(input("Network name? "))
     else:
-        net = NeuralNetwork(max_iter=20, layer_sizes=(784,16,10))
+        net = NeuralNetwork()
 
     #logger.addHandler(ch)
     #logger.addHandler(fh)
@@ -53,15 +54,20 @@ def main():
 
     net.fit(x_train, y_train, validation_data=(x_val, y_val))
 
-    save(net, f"../models/mnist_net_{timestr}.pkl")
+    model_file = f"../models/mnist_net_{timestr}.pkl"
+
 
     plt.plot(net.loss_curve, label="Loss")
     plt.plot(net.validation_scores, label="Validation Accuracy")
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
-    plt.title("Training Curve")
+    plt.title(f"Training Curve for {model_file}")
     plt.legend()
     plt.show()
+
+    plt.savefig(f"../models/mnist_net_{timestr}.svg")
+
+    save(net, f"../models/mnist_net_{timestr}.pkl")
 
 if __name__ == "__main__":
     main()
