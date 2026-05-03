@@ -161,7 +161,7 @@ class NeuralNetwork:
         alpha: float = 1e-4,
         batch_size: int | str = "auto",
         learning_rate: float = 0.001,
-        max_iter: int = 2000,
+        max_iter: int = 200,
         tolerance: float = 1e-4,
         n_iter_no_change: int = 25,
         random_state: int | None = None,
@@ -447,7 +447,9 @@ class NeuralNetwork:
 
             # Track validation score if requested
             if x_val is not None:
-                val_score = self.score(x_val, y_val)
+                # HACK: Only pick random 100 or less from x_val and y_val to speed things up
+                idx = rng.choice(np.arange(len(x_val)), min(100, len(x_val), replace=False))
+                val_score = self.score(x_val[idx], y_val[idx])
                 self.validation_scores.append(val_score)
                 logger.info(f"  -> Validation accuracy: {val_score:.4f}")
 
@@ -464,7 +466,7 @@ class NeuralNetwork:
                 logger.debug(f"No significant improvement (patience: {no_improvement}/{self.n_iter_no_change})")
                 
                 if no_improvement >= self.n_iter_no_change:
-                    logger.info(f"✓ Early stopping triggered at epoch {self.n_iter}: "
+                    logger.info(f"Early stopping triggered at epoch {self.n_iter}: "
                                f"no improvement for {self.n_iter_no_change} consecutive epochs")
                     break
 
