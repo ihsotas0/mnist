@@ -1,35 +1,3 @@
-"""
-🔧 Additional Recommendations
-
-    Add logging configuration example in docstring:
-
-# Enable debug logging
-logging.basicConfig(level=logging.DEBUG)
-# Or file logging for long training runs
-handler = logging.FileHandler('training.log')
-logger.addHandler(handler)
-
-    Add gradient clipping option with logging:
-
-# Optional: prevent exploding gradients
-if self.gradient_clip_norm is not None:
-    total_norm = np.sqrt(sum(np.sum(g**2) for g in gradients_w))
-    if total_norm > self.gradient_clip_norm:
-        logger.warning(f"Gradient norm {total_norm:.2f} exceeded clip threshold; scaling")
-        scale = self.gradient_clip_norm / total_norm
-        gradients_w = [g * scale for g in gradients_w]
-
-    Memory optimization: Pre-allocate arrays if max_iter is known:
-
-# Instead of list append in tight loops (already implemented above)
-# For very large max_iter, consider:
-# self.loss_curve = np.empty(self.max_iter) * np.nan
-# Then assign by index and trim at end
-
-The enhanced code now provides comprehensive visibility into training dynamics while fixing critical bugs that would prevent the network from functioning correctly. 🎯
-"""
-
-
 import logging
 import numpy as np
 from scipy.special import expit, softmax
