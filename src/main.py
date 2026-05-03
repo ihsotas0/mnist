@@ -14,19 +14,31 @@ def main():
     argv = sys.argv
 
     timestr = time.strftime("%Y_%m_%d-%H_%M_%S")
+    log_file = f"../logs/mnist_{timestr}.log"
+
+    #fh = logging.FileHandler(f"../logs/mnist_{timestr}.log")
+    #ch = logging.StreamHandler()
 
     # HACK: Implement better system
     if "-v" in argv:
-        logging.basicConfig(
-            level=logging.DEBUG, filename=f"../logs/mnist_{timestr}.log"
-        )
+        logger.basicConfig(level=logging.DEBUG)
+        #logger.setLevel(logging.DEBUG)
+        #ch.setLevel(logging.DEBUG)
+        #fh.setLevel(logging.DEBUG)
     else:
-        logging.basicConfig(level=logging.INFO, filename=f"../logs/mnist_{timestr}.log")
-
+        logger.basicConfig(level=logging.INFO)
+        #logger.setLevel(logging.INFO)
+        #ch.setLevel(logging.INFO)
+        #fh.setLevel(logging.INFO)
     if "-l" in argv:
         net = load(input("Network name? "))
     else:
         net = NeuralNetwork(max_iter=20)
+
+    #logger.addHandler(ch)
+    #logger.addHandler(fh)
+
+    logger.debug("Initialized logging")
 
     # Load datasets
     train_images = load_mnist_images("../data/train-images-idx3-ubyte")

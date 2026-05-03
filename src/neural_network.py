@@ -170,19 +170,25 @@ class NeuralNetwork:
         # FUTURE JONAH. START CODE REVIEW FROM HERE DOWN
 
         logger.info(f"Initializing NeuralNetwork with layer_sizes={layer_sizes}")
-        logger.debug(f"Parameters: activation={activation_function}, alpha={alpha}, "
-                    f"batch_size={batch_size}, lr={learning_rate}, max_iter={max_iter}")
-        
+        logger.debug(
+            f"Parameters: activation={activation_function}, alpha={alpha}, "
+            f"batch_size={batch_size}, lr={learning_rate}, max_iter={max_iter}"
+        )
+
         # Parameter validation
         if activation_function not in ACTIVATION_FUNCTIONS:
-            logger.error(f"Invalid activation_function: '{activation_function}'. "
-                        f"Valid options: {list(ACTIVATION_FUNCTIONS.keys())}")
+            logger.error(
+                f"Invalid activation_function: '{activation_function}'. "
+                f"Valid options: {list(ACTIVATION_FUNCTIONS.keys())}"
+            )
             raise ValueError(f"Unknown activation function: {activation_function}")
-        
+
         if len(layer_sizes) < 2:
-            logger.error(f"layer_sizes must have at least 2 elements (input and output), got {len(layer_sizes)}")
+            logger.error(
+                f"layer_sizes must have at least 2 elements (input and output), got {len(layer_sizes)}"
+            )
             raise ValueError("layer_sizes must define at least input and output layers")
-        
+
         if any(size <= 0 for size in layer_sizes):
             logger.error(f"All layer sizes must be positive, got {layer_sizes}")
             raise ValueError("Layer sizes must be positive integers")
@@ -196,8 +202,10 @@ class NeuralNetwork:
         # Initialize weights with appropriate scheme
         self.weights = self._get_initial_weights(layer_sizes)
         self.biases = self._get_initial_biases(layer_sizes)
-        logger.debug(f"Initialized {len(self.weights)} weight matrices with "
-                    f"{'He' if activation_function == 'relu' else 'Xavier'} initialization")
+        logger.debug(
+            f"Initialized {len(self.weights)} weight matrices with "
+            f"{'He' if activation_function == 'relu' else 'Xavier'} initialization"
+        )
 
         # Regularization
         self.alpha = alpha
@@ -220,8 +228,10 @@ class NeuralNetwork:
         self.loss_curve = []  # Use list for efficient appending
         self.validation_scores = []
         self.random_state = random_state
-        
-        logger.info(f"NeuralNetwork initialized successfully with {sum(w.size for w in self.weights) + sum(b.size for b in self.biases):,} parameters")
+
+        logger.info(
+            f"NeuralNetwork initialized successfully with {sum(w.size for w in self.weights) + sum(b.size for b in self.biases):,} parameters"
+        )
 
     def _get_initial_weights(self, layer_sizes):
         """Initialize weights using Xavier/Glorot initialization (He for ReLU)."""
@@ -233,11 +243,13 @@ class NeuralNetwork:
             else:
                 scale = np.sqrt(6.0 / (layer_sizes[i] + layer_sizes[i + 1]))
                 init_name = "Xavier"
-            
+
             w = np.random.randn(layer_sizes[i], layer_sizes[i + 1]) * scale
             weights.append(w)
-            logger.debug(f"Layer {i}->{i+1}: {layer_sizes[i]} x {layer_sizes[i+1]}, "
-                        f"{init_name} init, scale={scale:.4f}, weight std={np.std(w):.4f}")
+            logger.debug(
+                f"Layer {i}->{i+1}: {layer_sizes[i]} x {layer_sizes[i+1]}, "
+                f"{init_name} init, scale={scale:.4f}, weight std={np.std(w):.4f}"
+            )
         return weights
 
     def _get_initial_biases(self, layer_sizes):
@@ -249,7 +261,7 @@ class NeuralNetwork:
     def _forward_pass(self, x):
         """Forward pass returning activations and pre-activations for backprop."""
         logger.debug(f"Forward pass input shape: {x.shape}")
-        
+
         activations = [x]
         pre_activations = []
 
@@ -257,7 +269,7 @@ class NeuralNetwork:
         for i, (w, b) in enumerate(zip(self.weights, self.biases)):
             z = a @ w + b
             pre_activations.append(z)
-            
+
             # Apply activation: use softmax for output layer in multi-class settings
             if i == len(self.weights) - 1 and self.layer_sizes[-1] > 1:
                 # Output layer: softmax for numerical stability with cross-entropy
@@ -265,9 +277,11 @@ class NeuralNetwork:
                 logger.debug(f"Output layer: applied softmax, shape={a.shape}")
             else:
                 a = self.activation_function(z)
-                logger.debug(f"Hidden layer {i+1}: activation={self.activation_func_name}, "
-                           f"output range=[{a.min():.4f}, {a.max():.4f}]")
-            
+                logger.debug(
+                    f"Hidden layer {i+1}: activation={self.activation_func_name}, "
+                    f"output range=[{a.min():.4f}, {a.max():.4f}]"
+                )
+
             activations.append(a)
 
         logger.debug(f"Forward pass complete: {len(activations)} activations computed")
@@ -276,10 +290,10 @@ class NeuralNetwork:
     def _compute_loss(self, y_true, y_pred, weights=None):
         """Compute cross-entropy loss with optional L2 regularization."""
         n_samples = y_true.shape[0]
-        
+
         # Numerical stability: clip predictions
         y_pred_clipped = np.clip(y_pred, 1e-15, 1 - 1e-15)
-        
+
         # Cross-entropy: -sum(y * log(y_pred)) / n
         cross_entropy = -np.sum(y_true * np.log(y_pred_clipped)) / n_samples
         logger.debug(f"Cross-entropy loss (unregularized): {cross_entropy:.6f}")
@@ -304,8 +318,10 @@ class NeuralNetwork:
         # This works because d(CE)/d(z) = softmax(z) - y_true when using softmax output
         output_activation = activations[-1]
         delta = output_activation - y_true
-        logger.debug(f"Output delta: shape={delta.shape}, mean={np.mean(delta):.6f}, "
-                    f"std={np.std(delta):.6f}")
+        logger.debug(
+            f"Output delta: shape={delta.shape}, mean={np.mean(delta):.6f}, "
+            f"std={np.std(delta):.6f}"
+        )
 
         gradients_w = []
         gradients_b = []
@@ -314,16 +330,18 @@ class NeuralNetwork:
         for l in reversed(range(len(self.weights))):
             grad_w = activations[l].T @ delta / n_samples
             grad_b = np.mean(delta, axis=0)
-            
+
             # Add L2 regularization gradient
             if self.alpha > 0:
                 grad_w += self.alpha * self.weights[l]
                 logger.debug(f"Layer {l}: added L2 gradient (alpha={self.alpha})")
 
             # Log gradient statistics for debugging
-            logger.debug(f"Layer {l} gradients: W shape={grad_w.shape}, "
-                        f"||W||={np.linalg.norm(grad_w):.4f}, "
-                        f"||b||={np.linalg.norm(grad_b):.4f}")
+            logger.debug(
+                f"Layer {l} gradients: W shape={grad_w.shape}, "
+                f"||W||={np.linalg.norm(grad_w):.4f}, "
+                f"||b||={np.linalg.norm(grad_b):.4f}"
+            )
 
             gradients_w.insert(0, grad_w)
             gradients_b.insert(0, grad_b)
@@ -341,49 +359,59 @@ class NeuralNetwork:
     def _update_weights(self, gradients_w, gradients_b):
         """Apply gradient descent update to weights and biases."""
         logger.debug(f"Updating weights with learning_rate={self.learning_rate}")
-        
+
         for i in range(len(self.weights)):
             old_w_norm = np.linalg.norm(self.weights[i])
             old_b_norm = np.linalg.norm(self.biases[i])
-            
+
             self.weights[i] -= self.learning_rate * gradients_w[i]
             self.biases[i] -= self.learning_rate * gradients_b[i]
-            
+
             new_w_norm = np.linalg.norm(self.weights[i])
             new_b_norm = np.linalg.norm(self.biases[i])
-            
-            logger.debug(f"Layer {i}: weight norm {old_w_norm:.4f}→{new_w_norm:.4f}, "
-                        f"bias norm {old_b_norm:.4f}→{new_b_norm:.4f}")
+
+            logger.debug(
+                f"Layer {i}: weight norm {old_w_norm:.4f}→{new_w_norm:.4f}, "
+                f"bias norm {old_b_norm:.4f}→{new_b_norm:.4f}"
+            )
 
     def _get_batch_indices(self, n_samples, batch_size, rng):
         """Yield shuffled mini-batch indices."""
         indices = np.arange(n_samples)
         rng.shuffle(indices)
-        
+
         n_batches = int(np.ceil(n_samples / batch_size))
-        logger.debug(f"Created {n_batches} mini-batches of size ~{batch_size} from {n_samples} samples")
-        
+        logger.debug(
+            f"Created {n_batches} mini-batches of size ~{batch_size} from {n_samples} samples"
+        )
+
         for start in range(0, n_samples, batch_size):
             end = min(start + batch_size, n_samples)
             yield indices[start:end]
 
     def fit(self, x, y, validation_data=None):
         """Train the neural network using mini-batch SGD with early stopping."""
-        logger.info(f"Starting training: {x.shape[0]} samples, {x.shape[1]} features, "
-                   f"{y.shape[1]} classes")
-        
+        logger.info(
+            f"Starting training: {x.shape[0]} samples, {x.shape[1]} features, "
+            f"{y.shape[1]} classes"
+        )
+
         n_samples = x.shape[0]
         batch_size = (
             min(200, n_samples) if self.batch_size == "auto" else self.batch_size
         )
-        
+
         if batch_size > n_samples:
-            logger.warning(f"batch_size ({batch_size}) > n_samples ({n_samples}); "
-                          f"using full-batch gradient descent")
+            logger.warning(
+                f"batch_size ({batch_size}) > n_samples ({n_samples}); "
+                f"using full-batch gradient descent"
+            )
             batch_size = n_samples
-        
-        logger.info(f"Training configuration: batch_size={batch_size}, "
-                   f"max_epochs={self.max_iter}, early_stopping_patience={self.n_iter_no_change}")
+
+        logger.info(
+            f"Training configuration: batch_size={batch_size}, "
+            f"max_epochs={self.max_iter}, early_stopping_patience={self.n_iter_no_change}"
+        )
 
         x_train, y_train = x, y
 
@@ -400,21 +428,23 @@ class NeuralNetwork:
 
         best_loss = np.inf
         no_improvement = 0
-        
+
         # Initialize RNG with user-provided or default seed
-        rng = np.random.RandomState(self.random_state if self.random_state is not None else 42)
+        rng = np.random.RandomState(
+            self.random_state if self.random_state is not None else 42
+        )
         logger.debug(f"Random state initialized with seed={rng.randint(0, 2**31)}")
 
         for iteration in range(self.max_iter):
             self.n_iter = iteration + 1
-            
+
             # Shuffle data each epoch
             perm = np.arange(len(x_train))
             rng.shuffle(perm)
             x_shuf, y_shuf = x_train[perm], y_train[perm]
 
             epoch_losses = []
-            
+
             # Mini-batch SGD
             for batch_idx, batch_indices in enumerate(
                 self._get_batch_indices(len(x_train), batch_size, rng)
@@ -426,29 +456,37 @@ class NeuralNetwork:
                     x_batch, y_batch, activations, pre_activations
                 )
                 self._update_weights(grad_w, grad_b)
-                
+
                 # Track batch loss for epoch summary
                 batch_loss = self._compute_loss(y_batch, activations[-1], self.weights)
                 epoch_losses.append(batch_loss)
-                
+
                 if batch_idx % 10 == 0:
-                    logger.info(f"Epoch {self.n_iter}, Batch {batch_idx}: loss={batch_loss:.6f}")
+                    logger.info(
+                        f"Epoch {self.n_iter}, Batch {batch_idx}: loss={batch_loss:.6f}"
+                    )
 
             # Compute full training loss for monitoring
             train_activations, _ = self._forward_pass(x_train)
-            train_loss = self._compute_loss(y_train, train_activations[-1], self.weights)
+            train_loss = self._compute_loss(
+                y_train, train_activations[-1], self.weights
+            )
             self.loss_curve.append(train_loss)
-            
+
             # Log epoch summary
             avg_batch_loss = np.mean(epoch_losses) if epoch_losses else train_loss
-            logger.info(f"Epoch {self.n_iter:4d}/{self.max_iter}: "
-                       f"train_loss={train_loss:.6f} (batch_avg={avg_batch_loss:.6f}), "
-                       f"lr={self.learning_rate}")
+            logger.info(
+                f"Epoch {self.n_iter:4d}/{self.max_iter}: "
+                f"train_loss={train_loss:.6f} (batch_avg={avg_batch_loss:.6f}), "
+                f"lr={self.learning_rate}"
+            )
 
             # Track validation score if requested
             if x_val is not None:
                 # HACK: Only pick random 100 or less from x_val and y_val to speed things up
-                idx = rng.choice(np.arange(len(x_val)), min(100, len(x_val), replace=False))
+                idx = rng.choice(
+                    np.arange(len(x_val)), min(100, len(x_val)), replace=False
+                )
                 val_score = self.score(x_val[idx], y_val[idx])
                 self.validation_scores.append(val_score)
                 logger.info(f"  -> Validation accuracy: {val_score:.4f}")
@@ -456,32 +494,42 @@ class NeuralNetwork:
             # Early stopping check: did loss improve by at least tolerance?
             if best_loss - train_loss > self.tolerance:
                 # Significant improvement
-                logger.debug(f"Loss improved: {best_loss:.6f} -> {train_loss:.6f} "
-                           f"(delta={best_loss - train_loss:.6f} > tolerance={self.tolerance})")
+                logger.debug(
+                    f"Loss improved: {best_loss:.6f} -> {train_loss:.6f} "
+                    f"(delta={best_loss - train_loss:.6f} > tolerance={self.tolerance})"
+                )
                 best_loss = train_loss
                 no_improvement = 0
             else:
                 # No significant improvement
                 no_improvement += 1
-                logger.debug(f"No significant improvement (patience: {no_improvement}/{self.n_iter_no_change})")
-                
+                logger.debug(
+                    f"No significant improvement (patience: {no_improvement}/{self.n_iter_no_change})"
+                )
+
                 if no_improvement >= self.n_iter_no_change:
-                    logger.info(f"Early stopping triggered at epoch {self.n_iter}: "
-                               f"no improvement for {self.n_iter_no_change} consecutive epochs")
+                    logger.info(
+                        f"Early stopping triggered at epoch {self.n_iter}: "
+                        f"no improvement for {self.n_iter_no_change} consecutive epochs"
+                    )
                     break
 
         # Training complete summary
-        logger.info(f"Training completed: {self.n_iter}/{self.max_iter} epochs, "
-                   f"final loss={self.loss_curve[-1]:.6f}")
-        
+        logger.info(
+            f"Training completed: {self.n_iter}/{self.max_iter} epochs, "
+            f"final loss={self.loss_curve[-1]:.6f}"
+        )
+
         if self.validation_scores:
             best_val_idx = np.argmax(self.validation_scores)
-            logger.info(f"Best validation accuracy: {max(self.validation_scores):.4f} at epoch {best_val_idx + 1}")
+            logger.info(
+                f"Best validation accuracy: {max(self.validation_scores):.4f} at epoch {best_val_idx + 1}"
+            )
 
         # Convert lists to arrays for API compatibility
         self.loss_curve = np.array(self.loss_curve)
         self.validation_scores = np.array(self.validation_scores)
-        
+
         return self
 
     def predict_proba(self, x):
@@ -495,17 +543,21 @@ class NeuralNetwork:
         logger.debug(f"Predicting classes for {x.shape[0]} samples")
         proba = self.predict_proba(x)
         predictions = np.argmax(proba, axis=1)
-        logger.debug(f"Predictions: unique classes={np.unique(predictions)}, "
-                    f"distribution={dict(zip(*np.unique(predictions, return_counts=True)))}")
+        logger.debug(
+            f"Predictions: unique classes={np.unique(predictions)}, "
+            f"distribution={dict(zip(*np.unique(predictions, return_counts=True)))}"
+        )
         return predictions
 
     def score(self, x, y):
         """Return mean accuracy on test data x and labels y."""
         logger.debug(f"Evaluating accuracy on {x.shape[0]} samples")
-        
-        predictions = [self.predict(x) for xi in x]        
-        
+
+        predictions = [self.predict(x) for xi in x]
+
         accuracy = np.mean(predictions == y)
-        logger.info(f"Accuracy: {accuracy:.4f} ({np.sum(predictions == y)}/{len(y)} correct)")
-        
+        logger.info(
+            f"Accuracy: {accuracy:.4f} ({np.sum(predictions == y)}/{len(y)} correct)"
+        )
+
         return accuracy
